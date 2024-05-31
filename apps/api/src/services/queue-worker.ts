@@ -97,24 +97,25 @@ const workOnJob = async (job: Job, done: DoneCallback) => {
   }
 }
 
-const moveJobToWebScraperQueue = async (job: Job, done: DoneCallback) => {
-  try {
-    const webScraperQueue = getWebScraperQueue();
-    const tempWebScraperQueue = getTempWebScraperQueue();
-    const tempJob = await tempWebScraperQueue.getJob(job.id);
-    if (!tempJob) {
-      console.error(`Job ${job.id} not found in temp queue`);
-      return done(null, null);
-    }
+// const moveJobToWebScraperQueue = async (job: Job, done: DoneCallback) => {
+//   try {
+//     const webScraperQueue = getWebScraperQueue();
+//     const tempWebScraperQueue = getTempWebScraperQueue();
+//     const tempJob = await tempWebScraperQueue.getJob(job.id);
+//     if (!tempJob) {
+//       console.error(`Job ${job.id} not found in temp queue`);
+//       return done(null, null);
+//     }
 
-    console.log(`Moving job ${job.id} to web scraper queue`);
-    await tempJob.moveToFailed({ message: 'Moved to web scraper queue' }, true);
-    await webScraperQueue.add(tempJob.data, { jobId: tempJob.id });
-  } catch (error) {
-    console.error(`Error moving job ${job.id} to web scraper queue:`, error);
-    done(error, null);
-  }
-}
+//     console.log(`Moving job ${job.id} to web scraper queue`);
+//     await webScraperQueue.add({ ...tempJob.data }, { jobId: tempJob.id });
+//     await tempJob.moveToFailed({ message: 'Moved to web scraper queue' }, true);
+//     done(null, null)
+//   } catch (error) {
+//     console.error(`Error moving job ${job.id} to web scraper queue:`, error);
+//     done(error, null);
+//   }
+// }
 
 getWebScraperQueue().process(
   Math.floor(Number(process.env.NUM_WORKERS_PER_QUEUE ?? 8)),
@@ -128,25 +129,15 @@ async function closeGracefully() {
 
   console.log('Moving active jobs to temp queue...');
   try {
-    
     // creates a list with currently active jobs
     const activeJobsOnWebScraperQueue = await webScraperQueue.getActive();
     console.log('Active jobs:', activeJobsOnWebScraperQueue.map(job => job.id));
 
     // move activeJobs to tempWebScraperQueue
     const moveJobPromises = activeJobsOnWebScraperQueue.map(async (job) => {
+      console.log('Moving job:', job.id);
       await job.moveToFailed({ message: 'Graceful shutdown' }, true);
       await tempWebScraperQueue.add({ ...job.data }, { jobId: job.id });
-      console.log('Moving job:', job.id);
-      // try {
-      //   
-      // } catch (error) {
-      //   if (error.message.includes('Missing lock for job')) {
-      //     console.warn(`Job ${job.id} is not locked and cannot be moved.`);
-      //   } else {
-      //     console.error(`Failed to move job ${job.id} to temp queue:`, error);
-      //   }
-      // }
     });
 
     // Wait for all jobs to be moved
@@ -157,8 +148,6 @@ async function closeGracefully() {
   }
   
   console.log('Graceful shutdown complete. Exiting process.');
-  // bye!
-  process.exit(0);
 }
 
 
@@ -173,5 +162,8 @@ const shutdown = async (signal: string) => {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-
-getTempWebScraperQueue().process(1, moveJobToWebScraperQueue);
+getTempWebScraperQueue().process(1, (job, done) => {
+  if (!isShuttingDown) {
+    workOnJob(job, done);
+  }
+});
