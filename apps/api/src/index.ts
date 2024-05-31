@@ -2,7 +2,7 @@ import express from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
 import "dotenv/config";
-import { getWebScraperQueue } from "./services/queue-service";
+import { getTempWebScraperQueue, getWebScraperQueue } from "./services/queue-service";
 import { redisClient } from "./services/rate-limiter";
 import { v0Router } from "./routes/v0";
 import { initSDK } from '@hyperdx/node-opentelemetry';
@@ -24,7 +24,7 @@ const serverAdapter = new ExpressAdapter();
 serverAdapter.setBasePath(`/admin/${process.env.BULL_AUTH_KEY}/queues`);
 
 const { addQueue, removeQueue, setQueues, replaceQueues } = createBullBoard({
-  queues: [new BullAdapter(getWebScraperQueue())],
+  queues: [new BullAdapter(getWebScraperQueue()), new BullAdapter(getTempWebScraperQueue())],
   serverAdapter: serverAdapter,
 });
 

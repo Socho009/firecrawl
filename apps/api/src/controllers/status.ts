@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { getWebScraperQueue } from "../../src/services/queue-service";
+import { getTempWebScraperQueue, getWebScraperQueue } from "../../src/services/queue-service";
 
 export async function crawlJobStatusPreviewController(req: Request, res: Response) {
   try {
