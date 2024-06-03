@@ -23,7 +23,7 @@ config:
     #   arrivalRate: 1  # Cool down
   defaults:
     headers:
-      Authorization: "Bearer fc-168351db581b47cdacf28fa644d57017"
+      Authorization: "Bearer "
 scenarios:
   # - name: Scrape a URL
   #   flow:

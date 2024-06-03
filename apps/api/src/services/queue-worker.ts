@@ -5,14 +5,14 @@ import { logtail } from "./logtail";
 import { startWebScraperPipeline } from "../main/runWebScraper";
 import { callWebhook } from "./webhook";
 import { logJob } from "./logging/log_job";
-import { initSDK } from '@hyperdx/node-opentelemetry';
+// import { initSDK } from '@hyperdx/node-opentelemetry';
 import type { Job, DoneCallback } from "bull";
 
 let isShuttingDown = false;
 
-if (process.env.ENV === 'production') {
-  initSDK({ consoleCapture: true, additionalInstrumentations: []});
-}
+// if (process.env.ENV === 'production') {
+//   initSDK({ consoleCapture: true, additionalInstrumentations: []});
+// }
 
 const workOnJob = async (job: Job, done: DoneCallback) => {
   try {
@@ -97,26 +97,6 @@ const workOnJob = async (job: Job, done: DoneCallback) => {
   }
 }
 
-// const moveJobToWebScraperQueue = async (job: Job, done: DoneCallback) => {
-//   try {
-//     const webScraperQueue = getWebScraperQueue();
-//     const tempWebScraperQueue = getTempWebScraperQueue();
-//     const tempJob = await tempWebScraperQueue.getJob(job.id);
-//     if (!tempJob) {
-//       console.error(`Job ${job.id} not found in temp queue`);
-//       return done(null, null);
-//     }
-
-//     console.log(`Moving job ${job.id} to web scraper queue`);
-//     await webScraperQueue.add({ ...tempJob.data }, { jobId: tempJob.id });
-//     await tempJob.moveToFailed({ message: 'Moved to web scraper queue' }, true);
-//     done(null, null)
-//   } catch (error) {
-//     console.error(`Error moving job ${job.id} to web scraper queue:`, error);
-//     done(error, null);
-//   }
-// }
-
 getWebScraperQueue().process(
   Math.floor(Number(process.env.NUM_WORKERS_PER_QUEUE ?? 8)),
   workOnJob
@@ -129,38 +109,40 @@ async function closeGracefully() {
 
   console.log('Moving active jobs to temp queue...');
   try {
-    // creates a list with currently active jobs
     const activeJobsOnWebScraperQueue = await webScraperQueue.getActive();
     console.log('Active jobs:', activeJobsOnWebScraperQueue.map(job => job.id));
 
-    // move activeJobs to tempWebScraperQueue
     const moveJobPromises = activeJobsOnWebScraperQueue.map(async (job) => {
       console.log('Moving job:', job.id);
-      await job.moveToFailed({ message: 'Graceful shutdown' }, true);
-      await tempWebScraperQueue.add({ ...job.data }, { jobId: job.id });
+      try {
+        await job.moveToFailed({ message: 'Graceful shutdown' }, true);
+        console.log(`Job ${job.id} moved to failed.`);
+        await tempWebScraperQueue.add({ ...job.data }, { jobId: job.id });
+        console.log(`Job ${job.id} added to temp queue.`);
+      } catch (error) {
+        console.error(`Error moving job ${job.id}:`, error);
+      }
     });
 
-    // Wait for all jobs to be moved
     await Promise.all(moveJobPromises);
-    
+    console.log('All active jobs moved to temp queue.');
   } catch (error) {
     console.error('Error during graceful shutdown:', error);
   }
-  
+
   console.log('Graceful shutdown complete. Exiting process.');
 }
-
 
 const shutdown = async (signal: string) => {
   isShuttingDown = true;
   console.log(`${signal} signal received.`);
   await closeGracefully();
-  console.log('Finished closeGracefully(?)... bye...')
+  console.log('Finished closeGracefully... bye...')
   process.exit(0);
 };
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', async () => await shutdown('SIGTERM'));
+process.on('SIGINT', async () => await shutdown('SIGINT'));
 
 getTempWebScraperQueue().process(1, (job, done) => {
   if (!isShuttingDown) {

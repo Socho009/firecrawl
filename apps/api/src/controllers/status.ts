@@ -3,9 +3,13 @@ import { getTempWebScraperQueue, getWebScraperQueue } from "../../src/services/q
 
 export async function crawlJobStatusPreviewController(req: Request, res: Response) {
   try {
-    const job = await getWebScraperQueue().getJob(req.params.jobId);
+    let job = await getWebScraperQueue().getJob(req.params.jobId);
     if (!job) {
-      return res.status(404).json({ error: "Job not found" });
+      const tempJob = await getTempWebScraperQueue().getJob(req.params.jobId);
+      if (!tempJob) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+      job = tempJob;
     }
 
     const { current, current_url, total, current_step, partialDocs } = await job.progress();
