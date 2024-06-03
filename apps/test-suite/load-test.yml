@@ -13,7 +13,7 @@ config:
     # - duration: 60
     #   arrivalRate: 10  # Cool down
   # /crawl
-    - duration: 240
+    - duration: 180
       arrivalRate: 1  # Initial load
     # - duration: 120
     #   arrivalRate: 2  # Increased load

@@ -7,8 +7,7 @@ import { callWebhook } from "./webhook";
 import { logJob } from "./logging/log_job";
 // import { initSDK } from '@hyperdx/node-opentelemetry';
 import type { Job, DoneCallback } from "bull";
-
-let isShuttingDown = false;
+import { setValue, getValue } from './redis';
 
 // if (process.env.ENV === 'production') {
 //   initSDK({ consoleCapture: true, additionalInstrumentations: []});
@@ -129,23 +128,33 @@ async function closeGracefully() {
   } catch (error) {
     console.error('Error during graceful shutdown:', error);
   }
-
-  console.log('Graceful shutdown complete. Exiting process.');
 }
 
 const shutdown = async (signal: string) => {
-  isShuttingDown = true;
   console.log(`${signal} signal received.`);
+  const shutdownTimestamp = new Date().toISOString();
+  setValue('lastShutdownTimestamp', shutdownTimestamp)
   await closeGracefully();
-  console.log('Finished closeGracefully... bye...')
+  console.log('Graceful shutdown complete... bye...')
   process.exit(0);
 };
 
 process.on('SIGTERM', async () => await shutdown('SIGTERM'));
 process.on('SIGINT', async () => await shutdown('SIGINT'));
 
-getTempWebScraperQueue().process(1, (job, done) => {
-  if (!isShuttingDown) {
-    workOnJob(job, done);
+getTempWebScraperQueue().process(
+  Math.floor(Number(process.env.NUM_WORKERS_PER_QUEUE ?? 8) - 2),
+  (job, done) => {
+    const checkShutdownAndWork = async () => {
+      const shutdownTimestamp = new Date(await getValue('lastShutdownTimestamp')).getTime();
+      const now = new Date().getTime();
+      if (now - shutdownTimestamp > 60000) { // 1 minute
+        workOnJob(job, done);
+      } else {
+        console.log('Server is shutting down, skipping job processing.');
+      }
+    };
+
+    setInterval(checkShutdownAndWork, 60000); // Check every minute
   }
-});
+);

@@ -8,9 +8,6 @@ primary_region = 'mia'
 kill_signal = "SIGINT"
 kill_timeout = 300
 
-[deploy]
-  strategy = "bluegreen"
-
 [build]
 
 [processes]
